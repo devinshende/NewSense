@@ -3,18 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notebook GSAP Mode Selector</title>
+    <title>Content Editor</title>
     <!-- Load Tailwind CSS for styling and responsiveness -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load GSAP Core Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <style>
-        /* Using a clean, readable font and setting a light theme for the whole page */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6; /* Light gray background */
+            background-color: #f3f4f6;
+            overflow-x: hidden; /* Prevent horizontal scroll from character movement */
         }
-        /* Custom styling for the select dropdown */
         .mode-select {
             appearance: none;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%236B7280' d='M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z'/%3E%3C/svg%3E");
@@ -22,12 +21,46 @@
             background-position: right 0.75rem center;
             background-size: 1.5em;
         }
+        /* Style for the document container */
+        .document-card {
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            max-width: 4xl;
+            width: 90%;
+            /* Relative position needed for absolute children (character layer) */
+            position: relative;
+        }
+        /* Layer for the animated characters, positioned over the content */
+        #character-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allows clicks to pass through to the document below */
+            z-index: 10;
+        }
+        .character {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            position: absolute;
+            opacity: 0.8;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="flex flex-col items-center min-h-screen p-6 md:p-10">
 
-    <!-- Document Container: White card, wider for a reading experience -->
-    <div class="bg-white text-gray-900 p-8 md:p-16 rounded-xl shadow-2xl max-w-4xl w-full">
+    <!-- Document Container -->
+    <div id="document-card" class="document-card p-8 md:p-16 w-full">
+
+        <a href="index.html" class="inline-flex items-center text-blue-600 hover:text-blue-800 mb-6 font-medium">
+            <!-- Back Arrow SVG Icon -->
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+            Back to Input
+        </a>
 
         <!-- Title Section -->
         <h1 id="notebook-title" class="text-4xl md:text-5xl font-black mb-4 text-gray-800 border-b-2 pb-4 border-gray-200">
@@ -39,65 +72,202 @@
             <label for="style-mode" class="text-lg font-semibold text-gray-700">Select Mode:</label>
             <select id="style-mode" 
                     class="mode-select block w-full sm:w-64 p-3 border border-gray-300 rounded-lg bg-gray-50 focus:ring-blue-500 focus:border-blue-500 text-base mode-select cursor-pointer">
-                <option value="corporate">💼 Corporate Mode</option>
-                <option value="emoji">😂 Emoji Mode</option>
+                <option value="corporate">💼 LinkedIn / Corporate Speak</option>
+                <option value="emoji">😂 Horrible Emojis Copypasta</option>
                 <option value="argumentative">⚔️ Argumentative Mode</option>
                 <option value="forgetful">🤔 Forgetful Mode</option>
-                <option value="brainrot">🤪 Brainrot Mode</option>
+                <option value="brainrot">🤪 Brainrot / Slang</option>
             </select>
         </div>
 
         <!-- Output Area for Generated Text -->
         <div id="output-area" class="space-y-6 text-lg text-gray-700 leading-relaxed min-h-[400px]">
             <!-- Content will be injected here by JavaScript -->
+            <p>Paste text on the home page to begin transformation.</p>
         </div>
-
-        <!-- Back Button -->
-        <button onclick="window.location.href = 'index.html';" 
-                class="mb-6 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200 shadow-md">
-            Back to Input
-        </button>
+        
+        <!-- Character Animation Layer -->
+        <div id="character-layer">
+            <div id="char-1" class="character" style="background-color: #f87171;"></div>
+            <div id="char-2" class="character" style="background-color: #60a5fa;"></div>
+            <div id="char-3" class="character" style="background-color: #4ade80;"></div>
+        </div>
 
     </div>
 
     <script>
+        // --- TEXT PARSING FUNCTIONS ---
+
+        /**
+         * Splits raw text into paragraphs based on double newlines and wraps them in <p> tags.
+         * @param {string} rawText The text content to process.
+         * @returns {string} HTML string with text wrapped in <p> tags.
+         */
+        function splitParagraphs(rawText) {
+            // Split text by two or more newlines to identify distinct paragraphs
+            return rawText.split(/\n\s*\n/)
+                       .map(p => p.trim())
+                       .filter(p => p.length > 0) // Filter out empty strings
+                       .map(p => `<p>${p}</p>`)
+                       .join('');
+        }
+
+        /**
+         * Parent function for organized text processing before display.
+         * @param {string} textForDisplay The final transformed text ready for the DOM.
+         * @returns {string} HTML string for injection.
+         */
+        function ParseInput(textForDisplay) {
+            return splitParagraphs(textForDisplay);
+        }
+
+        // --- APPLICATION LOGIC ---
+
         window.onload = function() {
             const title = document.getElementById('notebook-title');
+            const documentCard = document.getElementById('document-card');
             const outputArea = document.getElementById('output-area');
             const modeSelect = document.getElementById('style-mode');
+            const characterLayer = document.getElementById('character-layer');
+            const characters = document.querySelectorAll('.character');
+
+            let animationFrameId = null;
+            let currentParagraphs = [];
             
-            // 1. Retrieve the base text from local storage
-            let baseText = localStorage.getItem('animationText') || "No text provided from index.html. Enter text in the previous step to see content here.";
-            
-            // --- Content Definitions (Maps mode value to the text that will be appended) ---
-            const modeDisplayNames = {
-                corporate: " - CORPORATE MODE APPLIED.",
-                emoji: " - EMOJI MODE APPLIED.",
-                argumentative: " - ARGUMENTATIVE MODE APPLIED.",
-                forgetful: " - FORGETFUL MODE APPLIED.",
-                brainrot: " - BRAINROT MODE APPLIED."
+            // --- 1. Get Input Text from URL ---
+            // Default text if accessed directly without content parameter
+            // const rawInputText = urlParams.get('content') || "This is default placeholder text because no content was pasted on the home page. Now try selecting a mode to see it transform! The characters will move and bump into these words to demonstrate collisions.";
+
+            let rawInputText = localStorage.getItem('animationText') || "No text provided from index.html. Enter text in the previous step to see content here.";
+
+            // --- 2. Transformation Logic (Placeholder Function) ---
+            const contentTransforms = {
+                corporate: (text) => text
+                    .replace(/problem/gi, 'challenge')
+                    .replace(/solution/gi, 'synergistic outcome')
+                    .replace(/goal/gi, 'key deliverable')
+                    .replace(/work on/gi, 'operationalize')
+                    .replace(/plan/gi, 'strategic roadmap'),
+                emoji: (text) => text
+                    .replace(/[.!?]/g, ' ✨ ')
+                    .replace(/ /g, ' 💅 ') + ' 👑',
+                argumentative: (text) => "It is logically indefensible to assume: " + text.toUpperCase() + ". Furthermore, the premise is fundamentally flawed.",
+                forgetful: (text) => text
+                    .replace(/the /g, ' that one... ')
+                    .replace(/is /g, ' wait, is it? ')
+                    .replace(/and/g, ' or was it... and? '),
+                brainrot: (text) => text
+                    .replace(/good/g, 'bussin\'')
+                    .replace(/winning/g, 'slaying') + ' no cap fr.'
             };
             
-            let currentMode = modeSelect.value;
-            
-            // --- Initialization Function ---
-            function initialize() {
-                // 1. Initial Content Load: Show the base text concatenated with the default mode.
-                updateContent(currentMode);
+            // --- 3. GSAP Character Movement ---
+
+            /**
+             * Starts a continuous, random movement loop for a single character.
+             * @param {HTMLElement} charElement The character DOM element.
+             */
+            function animateCharacter(charElement) {
+                const layerBounds = characterLayer.getBoundingClientRect();
+                const charSize = 40; // Matches CSS width/height
+
+                // Function to generate a new random position within the layer
+                function getRandomPosition() {
+                    return {
+                        x: gsap.utils.random(0, layerBounds.width - charSize),
+                        y: gsap.utils.random(0, layerBounds.height - charSize)
+                    };
+                }
+
+                function move() {
+                    const newPos = getRandomPosition();
+                    
+                    gsap.to(charElement, {
+                        x: newPos.x,
+                        y: newPos.y,
+                        duration: gsap.utils.random(4, 8), // Random speed
+                        ease: "sine.inOut",
+                        onComplete: move // Loop the movement indefinitely
+                    });
+                }
                 
-                // 2. Initial Page Animation (Title fade-in)
-                gsap.from(title, { opacity: 0, y: -20, duration: 1, ease: "power2.out" });
+                // Set initial random position and start the loop
+                const initialPos = getRandomPosition();
+                gsap.set(charElement, { x: initialPos.x, y: initialPos.y });
+                move();
             }
 
-            // --- Function to Handle Content Change and Animation (GSAP) ---
+            // --- 4. Collision Detection ---
+
+            /**
+             * Checks for collisions between characters and text paragraphs.
+             */
+            function checkCollisions() {
+                if (currentParagraphs.length === 0) return;
+
+                // Get bounding box of the whole document card once per frame
+                const cardRect = documentCard.getBoundingClientRect();
+                
+                characters.forEach(char => {
+                    // Get character position relative to the document card
+                    const charX = char.offsetLeft + char.clientWidth / 2;
+                    const charY = char.offsetTop + char.clientHeight / 2;
+                    const charRadius = char.clientWidth / 2;
+
+                    currentParagraphs.forEach(p => {
+                        // Get paragraph bounds relative to the document card
+                        const pRect = p.getBoundingClientRect();
+                        const pLeft = pRect.left - cardRect.left;
+                        const pTop = pRect.top - cardRect.top;
+                        const pRight = pRect.right - cardRect.left;
+                        const pBottom = pRect.bottom - cardRect.top;
+
+                        // Check for AABB (Axis-Aligned Bounding Box) collision
+                        if (charX + charRadius > pLeft &&
+                            charX - charRadius < pRight &&
+                            charY + charRadius > pTop &&
+                            charY - charRadius < pBottom) {
+                            
+                            // Collision detected! Apply GSAP shake effect only if not currently shaking
+                            if (!gsap.isTweening(p)) {
+                                gsap.to(p, {
+                                    x: 5,
+                                    duration: 0.05,
+                                    repeat: 1,
+                                    yoyo: true,
+                                    clearProps: "x", // Remove inline style after animation
+                                    ease: "power1.out"
+                                });
+                                // Optional: make character blink on hit
+                                gsap.to(char, {
+                                    scale: 1.2,
+                                    backgroundColor: '#FFD700',
+                                    duration: 0.1,
+                                    yoyo: true,
+                                    repeat: 1
+                                });
+                            }
+                        }
+                    });
+                });
+                
+                animationFrameId = requestAnimationFrame(checkCollisions);
+            }
+
+
+            // --- 5. Function to Handle Content Change and Animation (GSAP) ---
             function updateContent(mode) {
-                
-                // Get the display name to append
-                const modeSuffix = modeDisplayNames[mode] || "";
-                
-                // The new text to display
-                const combinedText = baseText + modeSuffix;
-                
+                // Stop collision checks during content transition
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
+                // Apply the selected transformation
+                const transformedText = contentTransforms[mode] 
+                    ? contentTransforms[mode](rawInputText)
+                    : rawInputText;
+
+                // Use the new ParseInput function to prepare the HTML
+                const newContentHTML = ParseInput(transformedText);
+
                 // 1. Animate OUT the current content (Fade and slide down)
                 gsap.to(outputArea.children, {
                     opacity: 0,
@@ -106,32 +276,46 @@
                     stagger: 0.05,
                     ease: "power1.in",
                     onComplete: () => {
-                        // 2. Clear old content
-                        outputArea.innerHTML = '';
+                        // 2. Clear old content and inject new HTML
+                        outputArea.innerHTML = newContentHTML;
                         
-                        // 3. Inject the new text inside a new paragraph
-                        const newParagraph = document.createElement('p');
-                        newParagraph.textContent = combinedText;
-                        outputArea.appendChild(newParagraph);
-                        
-                        // 4. Animate IN the new content (Fade and slide up)
-                        gsap.from(newParagraph, {
+                        // Update the reference to the new paragraphs
+                        currentParagraphs = outputArea.querySelectorAll('p');
+
+                        // 3. Animate IN the new content (Fade and slide up)
+                        gsap.from(currentParagraphs, {
                             opacity: 0,
                             y: -10, // Slide up from slightly above
                             duration: 0.5,
-                            ease: "power2.out"
+                            stagger: 0.08,
+                            ease: "power2.out",
+                            onComplete: () => {
+                                // 4. Restart collision detection after content is stable
+                                animationFrameId = requestAnimationFrame(checkCollisions);
+                            }
                         });
                     }
                 });
             }
 
-            // --- Event Listener ---
+            // --- 6. Initialization ---
+            function initialize() {
+                // Initial Content Load (using the first mode for display)
+                updateContent(modeSelect.value);
+                
+                // Initial Page Animation (Title fade-in)
+                gsap.from(title, { opacity: 0, y: -20, duration: 1, ease: "power2.out" });
+
+                // Start character animations
+                characters.forEach(animateCharacter);
+            }
+
+            // --- 7. Event Listener ---
             modeSelect.addEventListener('change', (event) => {
                 const selectedMode = event.target.value;
                 updateContent(selectedMode);
             });
             
-            // Start the application
             initialize();
         };
     </script>
