@@ -263,6 +263,9 @@
             const modeSelect = document.getElementById('style-mode');
             const characterLayer = document.getElementById('character-layer');
             const characters = document.querySelectorAll('.character');
+            const redactionStatus = document.getElementById('redaction-status');
+            const redactionCounter = document.getElementById('redaction-counter');
+            const redactionProgressBar = document.getElementById('redaction-progress-bar');
 
             let animationFrameId = null;
             let currentWords = [];
@@ -300,32 +303,15 @@
              */
             async function transformTextWithAPI(text, mode) {
                 try {
-                    console.log(`Calling API with mode: ${mode}`);
                     const response = await fetch(API_URL, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            text: text,
-                            mode: mode
-                        })
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text, mode })
                     });
                     
                     const data = await response.json();
-                    
-                    if (data.success) {
-                        console.log('API transformation successful');
-                        return data.transformed_text;
-                    } else {
-                        console.error('API Error:', data.error);
-                        // Fallback to basic transformation
-                        return fallbackTransform(text, mode);
-                    }
+                    return data.success ? data.transformed_text : fallbackTransform(text, mode);
                 } catch (error) {
-                    console.error('Network Error - API server may not be running:', error);
-                    console.log('Using fallback transformation');
-                    // Fallback to basic transformations if API is unavailable
                     return fallbackTransform(text, mode);
                 }
             }
@@ -467,17 +453,8 @@
                 return contentTransforms[mode] ? contentTransforms[mode](text) : text;
             }
 
-            // --- 4. GSAP Character Movement ---
-
-            /**
-             * Starts a continuous, random movement loop for a single character.
-             * Behavior changes based on sprite: Carmen (fast, flying), Jeff (slower), Cal (erratic).
-             * @param {HTMLElement} charElement The character DOM element.
-             */
             function animateCharacter(charElement) {
                 const layerBounds = characterLayer.getBoundingClientRect();
-
-                // Compute character size from the DOM so positioning matches visual size and transforms
                 const charWidth = charElement.clientWidth || 20;
                 const charHeight = charElement.clientHeight || 20;
 
@@ -491,14 +468,9 @@
                     const maxX = Math.max(0, layerBounds.width - charWidth);
                     const maxY = Math.max(0, layerBounds.height - charHeight);
                     const x = gsap.utils.random(0, maxX);
-                    let y;
-                    if (type === 'jeff') {
-                        // keep Jeff nearer to the middle/lower area for a grounded feel
-                        y = gsap.utils.random(maxY * 0.4, maxY * 0.85);
-                    } else {
-                        // Carmen/Cal/normal roam the full area
-                        y = gsap.utils.random(0, maxY);
-                    }
+                    const y = type === 'jeff' ? 
+                        gsap.utils.random(maxY * 0.4, maxY * 0.85) : 
+                        gsap.utils.random(0, maxY);
                     return { x, y };
                 }
 
@@ -508,15 +480,11 @@
                     let ease = 'sine.inOut';
 
                     if (behavior === 'carmen') {
-                        // fast, frequent moves; simulate flying with quicker durations
                         duration = gsap.utils.random(0.8, 2.2);
                         ease = 'power2.inOut';
                     } else if (behavior === 'jeff') {
-                        // slower, more languid movement
                         duration = gsap.utils.random(6, 11);
-                        ease = 'sine.inOut';
                     } else if (behavior === 'cal') {
-                        // erratic: short moves and quick direction changes
                         duration = gsap.utils.random(0.35, 1.1);
                         ease = 'power1.inOut';
                     } else {
@@ -531,15 +499,11 @@
                         onComplete: move
                     });
 
-                    // Add small behavioral flourishes
                     if (behavior === 'carmen') {
-                        // flap/tilt while moving
                         gsap.to(charElement, { rotation: gsap.utils.random(-18, 18), duration: Math.max(0.3, duration / 3), ease: 'sine.inOut', yoyo: true, repeat: 1 });
                     } else if (behavior === 'cal') {
-                        // jitter rotation to emphasize erratic direction changes
                         gsap.to(charElement, { rotation: gsap.utils.random(-12, 12), duration: gsap.utils.random(0.06, 0.25), ease: 'none', yoyo: true, repeat: 1 });
                     } else if (behavior === 'jeff') {
-                        // subtle slow bob
                         gsap.to(charElement, { rotation: gsap.utils.random(-4, 4), duration: duration * 0.5, ease: 'sine.inOut' });
                     }
                 }
@@ -562,14 +526,12 @@
             function checkCollisions() {
                 if (!currentWords || currentWords.length === 0) return;
 
-                // Update card rect once per frame
+                redactionRequestedThisFrame = false;
                 const cardRect = documentCard.getBoundingClientRect();
 
                 characters.forEach(char => {
-                    // Use boundingClientRect to account for GSAP transform (x/y)
                     const charRect = char.getBoundingClientRect();
 
-                    // Check each word for collision
                     currentWords.forEach((w, idx) => {
                         const wRect = w.getBoundingClientRect();
 
@@ -579,7 +541,6 @@
                             charRect.top > wRect.bottom);
 
                         if (overlap) {
-                            // If this word is already animating, skip
                             if (w._isBouncing) return;
 
                             // TRIGGER PROGRESSIVE REDACTION ON COLLISION
@@ -587,7 +548,7 @@
 
                             // We'll animate this word and a small clump around it (previous + next)
                             const neighbors = [w];
-                            const clumpRadius = 1; // number of neighbor words on each side
+                            const clumpRadius = 1;
                             for (let r = 1; r <= clumpRadius; r++) {
                                 if (currentWords[idx - r]) neighbors.push(currentWords[idx - r]);
                                 if (currentWords[idx + r]) neighbors.push(currentWords[idx + r]);
@@ -610,7 +571,6 @@
 
                             const skewAmt = gsap.utils.random(-4, 4);
 
-                            // Apply small nudge + blur to each neighbor (staggered slightly)
                             tl.to(neighbors, {
                                 duration: 0.12,
                                 y: 4,
@@ -622,25 +582,13 @@
                                 onStart: () => {
                                     neighbors.forEach(n => {
                                         n.style.willChange = 'transform, filter';
-                                        // store previous font and apply a random hit font from the list
-                                        try {
-                                            n._prevFont = n.style.fontFamily || window.getComputedStyle(n).fontFamily;
-                                        } catch (err) {
-                                            n._prevFont = '';
-                                        }
-                                        try {
-                                            const pick = collisionFonts[Math.floor(Math.random() * collisionFonts.length)];
-                                            n._hitFont = pick;
-                                            n.style.fontFamily = pick;
-                                        } catch (e) {
-                                            // fallback to Comic Sans if anything goes wrong
-                                            n.style.fontFamily = "'Comic Sans MS', 'Comic Sans', cursive";
-                                        }
+                                        n._prevFont = n.style.fontFamily || window.getComputedStyle(n).fontFamily;
+                                        const pick = collisionFonts[Math.floor(Math.random() * collisionFonts.length)];
+                                        n.style.fontFamily = pick;
                                     });
                                 }
                             });
 
-                            // Return to normal
                             tl.to(neighbors, {
                                 duration: 0.6,
                                 y: 0,
@@ -651,13 +599,11 @@
                                 stagger: 0.02
                             });
 
-                            // Subtle character reaction
                             gsap.fromTo(char, { scale: 1 }, { scale: 1.12, duration: 0.12, yoyo: true, repeat: 1, ease: 'power1.out' });
                         }
                     });
                 });
 
-                // --- Special-case collision: if Cal and Baby Jeff overlap, trigger screen shake + red overlay ---
                 try {
                     const calEl = Array.from(characters).find(c => (c.style.backgroundImage || '').includes('Cal.png'));
                     const babyEl = Array.from(characters).find(c => (c.style.backgroundImage || '').toLowerCase().includes('jeffbaby'));
@@ -674,17 +620,11 @@
                                 gsap.to(overlay, { backgroundColor: 'rgba(255,0,0,0)', delay: 0.6, duration: 0.6, ease: 'power1.inOut' });
                             }
 
-                            // Quick shake the document card
                             gsap.fromTo(documentCard, { x: 0 }, { x: 12, duration: 0.05, yoyo: true, repeat: 8, ease: 'power1.inOut', onComplete: () => { gsap.to(documentCard, { x: 0, duration: 0.08 }); } });
-
-                            // reset flag after the visual effect completes
                             setTimeout(() => { window._isScreenShaking = false; }, 900);
                         }
                     }
-                } catch (err) {
-                    // ignore any DOM exceptions during collision checks
-                    console.warn('Special collision check error', err);
-                }
+                } catch (err) {}
 
                 animationFrameId = requestAnimationFrame(checkCollisions);
             }
@@ -695,10 +635,8 @@
                 // Stop collision checks during content transition
                 if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
-                // Show loading state
                 outputArea.innerHTML = '<p class="text-gray-400 italic animate-pulse">🤖 AI is Improving your text...</p>';
 
-                // Call the API to transform text using model.py
                 const transformedText = await transformTextWithAPI(rawInputText, mode);
                 
                 // Store the original transformed text for redaction
@@ -716,20 +654,16 @@
                     console.log('No keyphrases found - redaction disabled');
                 }
 
-                // Use the new ParseInput function to prepare the HTML
                 const newContentHTML = ParseInput(transformedText);
 
                 if (instant) {
-                    // Immediately replace content without animating (useful for initial load)
                     outputArea.innerHTML = newContentHTML;
                     currentWords = outputArea.querySelectorAll('.word');
-                    // Ensure words are visible and reset transforms
                     gsap.set(currentWords, { opacity: 1, y: 0, scaleX: 1, skewX: 0, filter: 'none' });
                     animationFrameId = requestAnimationFrame(checkCollisions);
                     return;
                 }
 
-                // 1. Animate OUT the current content (Fade and slide down)
                 gsap.to(outputArea.children, {
                     opacity: 0,
                     y: 10,
@@ -737,21 +671,16 @@
                     stagger: 0.02,
                     ease: "power1.in",
                     onComplete: () => {
-                        // 2. Clear old content and inject new HTML
                         outputArea.innerHTML = newContentHTML;
-
-                        // Update the reference to the new word elements
                         currentWords = outputArea.querySelectorAll('.word');
 
-                        // 3. Animate IN the new content (Fade and slide up per word)
                         gsap.from(currentWords, {
                             opacity: 0,
-                            y: -6, // Slide up from slightly above
+                            y: -6,
                             duration: 0.18,
                             stagger: 0.005,
                             ease: "power2.out",
                             onComplete: () => {
-                                // 4. Restart collision detection after content is stable
                                 animationFrameId = requestAnimationFrame(checkCollisions);
                             }
                         });
@@ -759,23 +688,13 @@
                 });
             }
 
-            // --- 6. Initialization ---
             function initialize() {
-                // Initial Content Load (using the first mode for display) - inject instantly
                 updateContent(modeSelect.value, true);
-
-                // Initial Page Animation (Title fade-in)
                 gsap.from(title, { opacity: 0, y: -20, duration: 1, ease: "power2.out" });
-
-                // Start character animations
                 characters.forEach(animateCharacter);
             }
 
-            // --- 7. Event Listener ---
-            modeSelect.addEventListener('change', (event) => {
-                const selectedMode = event.target.value;
-                updateContent(selectedMode);
-            });
+            modeSelect.addEventListener('change', (e) => updateContent(e.target.value));
 
             initialize();
         };
