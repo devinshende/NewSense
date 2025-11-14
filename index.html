@@ -3,13 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Text Input for Animation</title>
+    <title>What the Text?</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f7f7f7;
+            background-image: url('landing_page_background.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -19,8 +23,8 @@
 </head>
 <body>
     <div class="w-full max-w-lg p-8 bg-white rounded-xl shadow-2xl">
-        <h1 class="text-3xl font-extrabold text-gray-900 mb-6 text-center">Prepare Your Animation</h1>
-        <p class="text-gray-600 mb-8 text-center">Enter the text you want to scramble and animate.</p>
+        <h1 class="text-3xl font-extrabold text-gray-900 mb-6 text-center">New Sense</h1>
+        <p class="text-gray-600 mb-8 text-center">The Best Dumb-A-Thon project (Duh!)</p>
 
         <!-- The file upload is included here as requested in the previous context, 
              but we won't process the file in this example for simplicity. -->
@@ -50,6 +54,18 @@
     </div>
 
     <script>
+        const error_messages = [
+            "Oops! You forgot to enter some text.",
+            "Hold on! The text field is empty.",
+            "Please provide some text to animate.",
+            "Text input cannot be empty. Try again!",
+            "Don't leave me hanging! Enter some text.",
+            "Come on, type something in the text box!",
+            "The text field is lonely without your input.",
+        ];
+    </script>
+
+    <script>
         function startAnimation() {
             const textInput = document.getElementById('text_input').value;
             
@@ -64,7 +80,7 @@
                     errorMessage.className = 'text-red-500 text-sm mt-3 text-center';
                     form.appendChild(errorMessage);
                 }
-                errorMessage.textContent = 'Please enter some text to animate.';
+                errorMessage.textContent = error_messages[Math.floor(Math.random() * error_messages.length)];
                 return;
             }
 
