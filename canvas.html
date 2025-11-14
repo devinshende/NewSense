@@ -536,7 +536,7 @@
 
 
             // --- 5. Function to Handle Content Change and Animation (GSAP) ---
-            function updateContent(mode, instant = false) {
+            async function updateContent(mode, instant = false) {
                 // Stop collision checks during content transition
                 if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
