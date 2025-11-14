@@ -92,7 +92,7 @@
         <!-- Title Section -->
         <h1 id="notebook-title"
             class="text-4xl md:text-5xl font-black mb-4 text-gray-800 border-b-2 pb-4 border-gray-200">
-            Content Style Selector
+            Focus Mode
         </h1>
 
         <!-- Mode Selector Dropdown -->
@@ -298,12 +298,9 @@
                                 ease: 'elastic.out(1, 0.6)'
                             });
 
-                            // Small character reaction
-                            gsap.fromTo(char, {
-                                scale: 1
-                            }, {
+                            // Small character reaction (scale only - do not change background color)
+                            gsap.fromTo(char, { scale: 1 }, {
                                 scale: 1.18,
-                                backgroundColor: '#FFD700',
                                 duration: 0.12,
                                 yoyo: true,
                                 repeat: 1,
