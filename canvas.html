@@ -60,16 +60,58 @@
             box-shadow: 0 6px 14px rgba(16, 24, 40, 0.12);
         }
 
-        /* Make the moneyjeff sprite larger without affecting other characters */
+        /* Words are inline-block so we can transform/blur individual words without collapsing layout */
+        .word {
+            display: inline-block;
+            white-space: pre;
+            /* preserve spaces/newlines between words */
+            will-change: transform, filter;
+        }
+
+        /* Kristina sprite sizing */
         #char-5 {
-            width: 72px;
-            height: 72px;
+            width: 100px;
+            height: 140px;
         }
 
         /* Make the UCSC jeff sprite twice the base character size */
         #char-3 {
             width: 96px;
+            height: 96px;
+        }
+
+        /* baby girl Jeff */
+        #char-6 {
+            width: 140px;
             height: 140px;
+        }
+
+        /* Make the Cal sprite larger */
+        #char-7 {
+            width: 146px;
+            height: 146px;
+        }
+
+        /* Carmen sprite sizing */
+        #char-4 {
+            width: 100px;
+            height: 160px;
+        }
+
+        /* Sabina sprite sizing */
+        #char-2 {
+            width: 50px;
+            height: 150px;
+        }
+
+        /* Full-area red overlay for special collision effect (initially transparent) */
+        #screen-overlay {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(255, 0, 0, 0);
+            pointer-events: none;
+            z-index: 40;
+            border-radius: 1rem;
         }
     </style>
 </head>
@@ -117,19 +159,35 @@
         <!-- Character Animation Layer -->
         <div id="character-layer">
             <div id="char-1" class="character" style="background-color: #a21f1f;"></div>
-            <div id="char-2" class="character" style="background-color: #60a5fa;"></div>
+            <!-- char-2 uses Sabina.png sprite -->
+            <div id="char-2" class="character"
+                style="background-image: url('assets/Sabina.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
+            </div>
             <!-- char-3 uses an image sprite from assets/ucscjeff.png -->
             <div id="char-3" class="character"
                 style="background-image: url('assets/ucscjeff.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
             </div>
-            <div id="char-4" class="character" style="background-color: #46a60f;"></div>
-            <!-- char-5 uses an image sprite from assets/moneyjeff.png -->
+            <!-- char-4 uses Carmen.png sprite -->
+            <div id="char-4" class="character"
+                style="background-image: url('assets/Carmen.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
+            </div>
+            <!-- char-5 uses an image sprite from assets/Kristina.png -->
             <div id="char-5" class="character"
-                style="background-image: url('assets/moneyjeff.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
+                style="background-image: url('assets/Kristina.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
             </div>
             <div id="char-6" class="character" style="background-color: #b393d9;"></div>
-            <div id="char-7" class="character" style="background-color: #34d399;"></div>
+            <!-- char-6 uses jeffbaby placeholder SVG (replace with PNG if you add it into assets/) -->
+            <div id="char-6" class="character"
+                style="background-image: url('assets/jeffbaby.JPG'); background-size: cover; background-position: center; background-repeat: no-repeat;">
+            </div>
+            <!-- char-7 uses Cal.png sprite -->
+            <div id="char-7" class="character"
+                style="background-image: url('assets/Cal.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
+            </div>
         </div>
+
+        <!-- Red overlay used when Cal + Baby Jeff collide -->
+        <div id="screen-overlay" aria-hidden="true"></div>
 
     </div>
 
@@ -143,10 +201,16 @@
          */
         function splitParagraphs(rawText) {
             // Split text by two or more newlines to identify distinct paragraphs
+            // Wrap each word in a <span class="word"> so collisions can affect individual words
             return rawText.split(/\n\s*\n/)
                 .map(p => p.trim())
                 .filter(p => p.length > 0) // Filter out empty strings
-                .map(p => `<p>${p}</p>`)
+                .map(p => {
+                    // Split on spaces but keep separators so spacing is preserved.
+                    // We'll create spans for words and join with a single space.
+                    const words = p.split(/\s+/).map(w => `<span class="word">${w}</span>`).join(' ');
+                    return `<p>${words}</p>`;
+                })
                 .join('');
         }
 
@@ -170,7 +234,14 @@
             const characters = document.querySelectorAll('.character');
 
             let animationFrameId = null;
-            let currentParagraphs = [];
+            let currentWords = [];
+            // Fonts to rotate through when words are hit
+            const collisionFonts = [
+                'Arial, sans-serif',
+                "'Comic Sans MS', 'Comic Sans', cursive",
+                "'Papyrus', fantasy",
+                "'Rubik Glitch', 'Arial', sans-serif"
+            ];
 
             // --- 1. Get Input Text from URL ---
             // Default text if accessed directly without content parameter
@@ -203,6 +274,7 @@
 
             /**
              * Starts a continuous, random movement loop for a single character.
+             * Behavior changes based on sprite: Carmen (fast, flying), Jeff (slower), Cal (erratic).
              * @param {HTMLElement} charElement The character DOM element.
              */
             function animateCharacter(charElement) {
@@ -212,29 +284,72 @@
                 const charWidth = charElement.clientWidth || 20;
                 const charHeight = charElement.clientHeight || 20;
 
-                // Function to generate a new random position within the layer
-                function getRandomPosition() {
-                    return {
-                        x: gsap.utils.random(0, Math.max(0, layerBounds.width - charWidth)),
-                        y: gsap.utils.random(0, Math.max(0, layerBounds.height - charHeight))
-                    };
+                const bg = (charElement.style.backgroundImage || '').toLowerCase();
+                let behavior = 'normal';
+                if (bg.includes('carmen')) behavior = 'carmen';
+                else if (bg.includes('cal')) behavior = 'cal';
+                else if (bg.includes('jeff')) behavior = 'jeff';
+
+                function getRandomPositionFor(type) {
+                    const maxX = Math.max(0, layerBounds.width - charWidth);
+                    const maxY = Math.max(0, layerBounds.height - charHeight);
+                    const x = gsap.utils.random(0, maxX);
+                    let y;
+                    if (type === 'jeff') {
+                        // keep Jeff nearer to the middle/lower area for a grounded feel
+                        y = gsap.utils.random(maxY * 0.4, maxY * 0.85);
+                    } else {
+                        // Carmen/Cal/normal roam the full area
+                        y = gsap.utils.random(0, maxY);
+                    }
+                    return { x, y };
                 }
 
                 function move() {
-                    const newPos = getRandomPosition();
+                    const newPos = getRandomPositionFor(behavior);
+                    let duration = 4;
+                    let ease = 'sine.inOut';
+
+                    if (behavior === 'carmen') {
+                        // fast, frequent moves; simulate flying with quicker durations
+                        duration = gsap.utils.random(0.8, 2.2);
+                        ease = 'power2.inOut';
+                    } else if (behavior === 'jeff') {
+                        // slower, more languid movement
+                        duration = gsap.utils.random(6, 11);
+                        ease = 'sine.inOut';
+                    } else if (behavior === 'cal') {
+                        // erratic: short moves and quick direction changes
+                        duration = gsap.utils.random(0.35, 1.1);
+                        ease = 'power1.inOut';
+                    } else {
+                        duration = gsap.utils.random(3.5, 7.5);
+                    }
 
                     gsap.to(charElement, {
                         x: newPos.x,
                         y: newPos.y,
-                        duration: gsap.utils.random(4, 8), // Random speed
-                        ease: "sine.inOut",
-                        onComplete: move // Loop the movement indefinitely
+                        duration,
+                        ease,
+                        onComplete: move
                     });
+
+                    // Add small behavioral flourishes
+                    if (behavior === 'carmen') {
+                        // flap/tilt while moving
+                        gsap.to(charElement, { rotation: gsap.utils.random(-18, 18), duration: Math.max(0.3, duration / 3), ease: 'sine.inOut', yoyo: true, repeat: 1 });
+                    } else if (behavior === 'cal') {
+                        // jitter rotation to emphasize erratic direction changes
+                        gsap.to(charElement, { rotation: gsap.utils.random(-12, 12), duration: gsap.utils.random(0.06, 0.25), ease: 'none', yoyo: true, repeat: 1 });
+                    } else if (behavior === 'jeff') {
+                        // subtle slow bob
+                        gsap.to(charElement, { rotation: gsap.utils.random(-4, 4), duration: duration * 0.5, ease: 'sine.inOut' });
+                    }
                 }
 
                 // Set initial random position and start the loop
-                const initialPos = getRandomPosition();
-                gsap.set(charElement, { x: initialPos.x, y: initialPos.y });
+                const initialPos = getRandomPositionFor(behavior);
+                gsap.set(charElement, { x: initialPos.x, y: initialPos.y, rotation: 0 });
                 move();
             }
 
@@ -248,7 +363,7 @@
              * Checks for collisions between characters and text paragraphs.
              */
             function checkCollisions() {
-                if (currentParagraphs.length === 0) return;
+                if (!currentWords || currentWords.length === 0) return;
 
                 // Update card rect once per frame
                 const cardRect = documentCard.getBoundingClientRect();
@@ -257,65 +372,126 @@
                     // Use boundingClientRect to account for GSAP transform (x/y)
                     const charRect = char.getBoundingClientRect();
 
-                    currentParagraphs.forEach(p => {
-                        const pRect = p.getBoundingClientRect();
+                    // Check each word for collision
+                    currentWords.forEach((w, idx) => {
+                        const wRect = w.getBoundingClientRect();
 
-                        // Simple AABB overlap check in viewport coordinates
-                        const overlap = !(charRect.right < pRect.left ||
-                            charRect.left > pRect.right ||
-                            charRect.bottom < pRect.top ||
-                            charRect.top > pRect.bottom);
+                        const overlap = !(charRect.right < wRect.left ||
+                            charRect.left > wRect.right ||
+                            charRect.bottom < wRect.top ||
+                            charRect.top > wRect.bottom);
 
                         if (overlap) {
-                            // Prevent repeated triggering on the same paragraph until animation finishes
-                            if (p._isBouncing) return;
-                            p._isBouncing = true;
+                            // If this word is already animating, skip
+                            if (w._isBouncing) return;
 
-                            // Ensure transform origin so the warp looks natural
-                            p.style.transformOrigin = 'center center';
+                            // We'll animate this word and a small clump around it (previous + next)
+                            const neighbors = [w];
+                            const clumpRadius = 1; // number of neighbor words on each side
+                            for (let r = 1; r <= clumpRadius; r++) {
+                                if (currentWords[idx - r]) neighbors.push(currentWords[idx - r]);
+                                if (currentWords[idx + r]) neighbors.push(currentWords[idx + r]);
+                            }
 
-                            // Warp + elastic bounce timeline
+                            neighbors.forEach(n => { n._isBouncing = true; n.style.transformOrigin = 'center center'; });
+
                             const tl = gsap.timeline({
-                                onComplete: () => { p._isBouncing = false; }
+                                onComplete: () => {
+                                    neighbors.forEach(n => {
+                                        n._isBouncing = false;
+                                        n.style.willChange = '';
+                                        if (n._prevFont !== undefined) {
+                                            n.style.fontFamily = n._prevFont;
+                                            delete n._prevFont;
+                                        }
+                                    });
+                                }
                             });
 
-                            // Quick warp/skew + nudge in the direction of the collision
-                            const skewAmt = gsap.utils.random(-8, 8);
-                            tl.to(p, {
+                            const skewAmt = gsap.utils.random(-4, 4);
+
+                            // Apply small nudge + blur to each neighbor (staggered slightly)
+                            tl.to(neighbors, {
                                 duration: 0.12,
-                                y: 8,
-                                scaleX: 1.03,
+                                y: 4,
+                                scaleX: 1.02,
                                 skewX: skewAmt,
-                                ease: 'power1.out'
+                                filter: 'blur(2px)',
+                                ease: 'power1.out',
+                                stagger: 0.02,
+                                onStart: () => {
+                                    neighbors.forEach(n => {
+                                        n.style.willChange = 'transform, filter';
+                                        // store previous font and apply a random hit font from the list
+                                        try {
+                                            n._prevFont = n.style.fontFamily || window.getComputedStyle(n).fontFamily;
+                                        } catch (err) {
+                                            n._prevFont = '';
+                                        }
+                                        try {
+                                            const pick = collisionFonts[Math.floor(Math.random() * collisionFonts.length)];
+                                            n._hitFont = pick;
+                                            n.style.fontFamily = pick;
+                                        } catch (e) {
+                                            // fallback to Comic Sans if anything goes wrong
+                                            n.style.fontFamily = "'Comic Sans MS', 'Comic Sans', cursive";
+                                        }
+                                    });
+                                }
                             });
 
-                            // Elastic return for a bouncy feeling
-                            tl.to(p, {
-                                duration: 0.8,
+                            // Return to normal
+                            tl.to(neighbors, {
+                                duration: 0.6,
                                 y: 0,
                                 scaleX: 1,
                                 skewX: 0,
-                                ease: 'elastic.out(1, 0.6)'
+                                filter: 'blur(0px)',
+                                ease: 'elastic.out(1, 0.6)',
+                                stagger: 0.02
                             });
 
-                            // Small character reaction (scale only - do not change background color)
-                            gsap.fromTo(char, { scale: 1 }, {
-                                scale: 1.18,
-                                duration: 0.12,
-                                yoyo: true,
-                                repeat: 1,
-                                ease: 'power1.out'
-                            });
+                            // Subtle character reaction
+                            gsap.fromTo(char, { scale: 1 }, { scale: 1.12, duration: 0.12, yoyo: true, repeat: 1, ease: 'power1.out' });
                         }
                     });
                 });
+
+                // --- Special-case collision: if Cal and Baby Jeff overlap, trigger screen shake + red overlay ---
+                try {
+                    const calEl = Array.from(characters).find(c => (c.style.backgroundImage || '').includes('Cal.png'));
+                    const babyEl = Array.from(characters).find(c => (c.style.backgroundImage || '').toLowerCase().includes('jeffbaby'));
+                    if (calEl && babyEl) {
+                        const crect = calEl.getBoundingClientRect();
+                        const brect = babyEl.getBoundingClientRect();
+                        const overlapSpecial = !(crect.right < brect.left || crect.left > brect.right || crect.bottom < brect.top || crect.top > brect.bottom);
+                        if (overlapSpecial && !window._isScreenShaking) {
+                            window._isScreenShaking = true;
+                            const overlay = document.getElementById('screen-overlay');
+                            if (overlay) {
+                                gsap.killTweensOf(overlay);
+                                gsap.to(overlay, { backgroundColor: 'rgba(255,0,0,0.55)', duration: 0.08, ease: 'power1.out' });
+                                gsap.to(overlay, { backgroundColor: 'rgba(255,0,0,0)', delay: 0.6, duration: 0.6, ease: 'power1.inOut' });
+                            }
+
+                            // Quick shake the document card
+                            gsap.fromTo(documentCard, { x: 0 }, { x: 12, duration: 0.05, yoyo: true, repeat: 8, ease: 'power1.inOut', onComplete: () => { gsap.to(documentCard, { x: 0, duration: 0.08 }); } });
+
+                            // reset flag after the visual effect completes
+                            setTimeout(() => { window._isScreenShaking = false; }, 900);
+                        }
+                    }
+                } catch (err) {
+                    // ignore any DOM exceptions during collision checks
+                    console.warn('Special collision check error', err);
+                }
 
                 animationFrameId = requestAnimationFrame(checkCollisions);
             }
 
 
             // --- 5. Function to Handle Content Change and Animation (GSAP) ---
-            function updateContent(mode) {
+            function updateContent(mode, instant = false) {
                 // Stop collision checks during content transition
                 if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
@@ -327,26 +503,36 @@
                 // Use the new ParseInput function to prepare the HTML
                 const newContentHTML = ParseInput(transformedText);
 
+                if (instant) {
+                    // Immediately replace content without animating (useful for initial load)
+                    outputArea.innerHTML = newContentHTML;
+                    currentWords = outputArea.querySelectorAll('.word');
+                    // Ensure words are visible and reset transforms
+                    gsap.set(currentWords, { opacity: 1, y: 0, scaleX: 1, skewX: 0, filter: 'none' });
+                    animationFrameId = requestAnimationFrame(checkCollisions);
+                    return;
+                }
+
                 // 1. Animate OUT the current content (Fade and slide down)
                 gsap.to(outputArea.children, {
                     opacity: 0,
                     y: 10,
-                    duration: 0.3,
-                    stagger: 0.05,
+                    duration: 0.18,
+                    stagger: 0.02,
                     ease: "power1.in",
                     onComplete: () => {
                         // 2. Clear old content and inject new HTML
                         outputArea.innerHTML = newContentHTML;
 
-                        // Update the reference to the new paragraphs
-                        currentParagraphs = outputArea.querySelectorAll('p');
+                        // Update the reference to the new word elements
+                        currentWords = outputArea.querySelectorAll('.word');
 
-                        // 3. Animate IN the new content (Fade and slide up)
-                        gsap.from(currentParagraphs, {
+                        // 3. Animate IN the new content (Fade and slide up per word)
+                        gsap.from(currentWords, {
                             opacity: 0,
-                            y: -10, // Slide up from slightly above
-                            duration: 0.5,
-                            stagger: 0.08,
+                            y: -6, // Slide up from slightly above
+                            duration: 0.18,
+                            stagger: 0.005,
                             ease: "power2.out",
                             onComplete: () => {
                                 // 4. Restart collision detection after content is stable
@@ -359,8 +545,8 @@
 
             // --- 6. Initialization ---
             function initialize() {
-                // Initial Content Load (using the first mode for display)
-                updateContent(modeSelect.value);
+                // Initial Content Load (using the first mode for display) - inject instantly
+                updateContent(modeSelect.value, true);
 
                 // Initial Page Animation (Title fade-in)
                 gsap.from(title, { opacity: 0, y: -20, duration: 1, ease: "power2.out" });
