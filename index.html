@@ -3,56 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GSAP Hello World Starter</title>
-    <!-- Load Tailwind CSS for styling and responsiveness -->
+    <title>Text Input for Animation</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load GSAP Core Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <style>
-        /* Using the Inter font for a clean look */
         body {
             font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
     </style>
 </head>
-<body class="bg-gray-900 flex items-center justify-center min-h-screen p-4">
+<body>
+    <div class="w-full max-w-lg p-8 bg-white rounded-xl shadow-2xl">
+        <h1 class="text-3xl font-extrabold text-gray-900 mb-6 text-center">Prepare Your Animation</h1>
+        <p class="text-gray-600 mb-8 text-center">Enter the text you want to scramble and animate.</p>
 
-    <!-- Main Content Container: Centered and responsive -->
-    <div class="bg-gray-800 text-white p-8 md:p-12 rounded-2xl shadow-2xl max-w-lg w-full text-center">
+        <!-- The file upload is included here as requested in the previous context, 
+             but we won't process the file in this example for simplicity. -->
+        <form id="animationForm">
+            <div class="mb-6">
+                <label for="file_upload" class="block text-sm font-medium text-gray-700 mb-2">Optional: Upload File (for context)</label>
+                <input type="file" id="file_upload" class="block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100" />
+            </div>
 
-        <!-- Header - Give it an ID for easy GSAP targeting -->
-        <h1 id="header" class="text-5xl md:text-6xl font-extrabold mb-4 text-blue-400">
-            Hello, GSAP World!
-        </h1>
-
-        <!-- Paragraph - Give it an ID for easy GSAP targeting -->
-        <p id="content" class="text-lg md:text-xl text-gray-300 leading-relaxed">
-            This is your starting point for awesome web animations. The page elements are ready to be targeted by GSAP.
-            We've already added a simple fade-up animation to confirm the library is loaded and working correctly.
-        </p>
-
+            <div class="mb-6">
+                <label for="text_input" class="block text-sm font-medium text-gray-700 mb-2">Text to Animate</label>
+                <textarea id="text_input" rows="5" placeholder="Type your dynamic text here..."
+                          class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 resize-y text-gray-800"></textarea>
+            </div>
+            
+            <!-- This is now a simple button that triggers the JS function -->
+            <button type="button" onclick="startAnimation()"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 shadow-xl transform hover:scale-[1.01] active:scale-[0.99] focus:outline-none focus:ring-4 focus:ring-blue-300">
+                Submit
+            </button>
+        </form>
     </div>
 
     <script>
-        // We use window.onload to ensure the DOM is fully ready before running GSAP
-        window.onload = function() {
-            // Target the elements by their IDs
-            const header = document.getElementById('header');
-            const content = document.getElementById('content');
+        function startAnimation() {
+            const textInput = document.getElementById('text_input').value;
+            
+            if (textInput.trim() === "") {
+                // Instead of alert(), we show a simple UI message
+                const form = document.getElementById('animationForm');
+                let errorMessage = document.getElementById('error-message');
+                
+                if (!errorMessage) {
+                    errorMessage = document.createElement('p');
+                    errorMessage.id = 'error-message';
+                    errorMessage.className = 'text-red-500 text-sm mt-3 text-center';
+                    form.appendChild(errorMessage);
+                }
+                errorMessage.textContent = 'Please enter some text to animate.';
+                return;
+            }
 
-            // --- GSAP Starter Animation ---
-            // This 'from' tween makes the elements slide up and fade in from below the screen.
-            gsap.from([header, content], {
-                opacity: 0,
-                y: 30, // Start 30px below final position
-                duration: 1.2, // Animation duration
-                ease: "power3.out", // Smooth easing
-                stagger: 0.2, // Delay the paragraph slightly after the header
-            });
+            // 1. Save the text to localStorage for the next page to read
+            localStorage.setItem('animationText', textInput);
 
-            // You can replace or add more complex animations here later!
-        };
+            // 2. Redirect to the canvas page
+            window.location.href = 'canvas.html'; // <<< CHANGED HERE
+        }
     </script>
-
 </body>
 </html>

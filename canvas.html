@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notebook GSAP Mode Selector</title>
+    <!-- Load Tailwind CSS for styling and responsiveness -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load GSAP Core Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <style>
+        /* Using a clean, readable font and setting a light theme for the whole page */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        /* Custom styling for the select dropdown */
+        .mode-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%236B7280' d='M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 1.5em;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center min-h-screen p-6 md:p-10">
+
+    <!-- Document Container: White card, wider for a reading experience -->
+    <div class="bg-white text-gray-900 p-8 md:p-16 rounded-xl shadow-2xl max-w-4xl w-full">
+
+        <!-- Title Section -->
+        <h1 id="notebook-title" class="text-4xl md:text-5xl font-black mb-4 text-gray-800 border-b-2 pb-4 border-gray-200">
+            Content Style Selector
+        </h1>
+
+        <!-- Mode Selector Dropdown -->
+        <div class="mb-10 flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+            <label for="style-mode" class="text-lg font-semibold text-gray-700">Select Mode:</label>
+            <select id="style-mode" 
+                    class="mode-select block w-full sm:w-64 p-3 border border-gray-300 rounded-lg bg-gray-50 focus:ring-blue-500 focus:border-blue-500 text-base mode-select cursor-pointer">
+                <option value="corporate">💼 Corporate Mode</option>
+                <option value="emoji">😂 Emoji Mode</option>
+                <option value="argumentative">⚔️ Argumentative Mode</option>
+                <option value="forgetful">🤔 Forgetful Mode</option>
+                <option value="brainrot">🤪 Brainrot Mode</option>
+            </select>
+        </div>
+
+        <!-- Output Area for Generated Text -->
+        <div id="output-area" class="space-y-6 text-lg text-gray-700 leading-relaxed min-h-[400px]">
+            <!-- Content will be injected here by JavaScript -->
+        </div>
+
+        <!-- Back Button -->
+        <button onclick="window.location.href = 'index.html';" 
+                class="mb-6 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200 shadow-md">
+            Back to Input
+        </button>
+
+    </div>
+
+    <script>
+        window.onload = function() {
+            const title = document.getElementById('notebook-title');
+            const outputArea = document.getElementById('output-area');
+            const modeSelect = document.getElementById('style-mode');
+            
+            // 1. Retrieve the base text from local storage
+            let baseText = localStorage.getItem('animationText') || "No text provided from index.html. Enter text in the previous step to see content here.";
+            
+            // --- Content Definitions (Maps mode value to the text that will be appended) ---
+            const modeDisplayNames = {
+                corporate: " - CORPORATE MODE APPLIED.",
+                emoji: " - EMOJI MODE APPLIED.",
+                argumentative: " - ARGUMENTATIVE MODE APPLIED.",
+                forgetful: " - FORGETFUL MODE APPLIED.",
+                brainrot: " - BRAINROT MODE APPLIED."
+            };
+            
+            let currentMode = modeSelect.value;
+            
+            // --- Initialization Function ---
+            function initialize() {
+                // 1. Initial Content Load: Show the base text concatenated with the default mode.
+                updateContent(currentMode);
+                
+                // 2. Initial Page Animation (Title fade-in)
+                gsap.from(title, { opacity: 0, y: -20, duration: 1, ease: "power2.out" });
+            }
+
+            // --- Function to Handle Content Change and Animation (GSAP) ---
+            function updateContent(mode) {
+                
+                // Get the display name to append
+                const modeSuffix = modeDisplayNames[mode] || "";
+                
+                // The new text to display
+                const combinedText = baseText + modeSuffix;
+                
+                // 1. Animate OUT the current content (Fade and slide down)
+                gsap.to(outputArea.children, {
+                    opacity: 0,
+                    y: 10,
+                    duration: 0.3,
+                    stagger: 0.05,
+                    ease: "power1.in",
+                    onComplete: () => {
+                        // 2. Clear old content
+                        outputArea.innerHTML = '';
+                        
+                        // 3. Inject the new text inside a new paragraph
+                        const newParagraph = document.createElement('p');
+                        newParagraph.textContent = combinedText;
+                        outputArea.appendChild(newParagraph);
+                        
+                        // 4. Animate IN the new content (Fade and slide up)
+                        gsap.from(newParagraph, {
+                            opacity: 0,
+                            y: -10, // Slide up from slightly above
+                            duration: 0.5,
+                            ease: "power2.out"
+                        });
+                    }
+                });
+            }
+
+            // --- Event Listener ---
+            modeSelect.addEventListener('change', (event) => {
+                const selectedMode = event.target.value;
+                updateContent(selectedMode);
+            });
+            
+            // Start the application
+            initialize();
+        };
+    </script>
+
+</body>
+</html>
