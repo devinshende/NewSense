@@ -1,4 +1,5 @@
-# NLPDumbathon 2025
+# NewSense
+The product our team introduced for the NLP Dumbathon 2025 at UC Santa Cruz organized by Cal Blanco
 
 A text transformation and redaction application with NLP-powered keyphrase extraction.
 
