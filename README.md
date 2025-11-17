@@ -50,9 +50,9 @@ This starts the redaction/keyphrase API at `http://localhost:8001`
 
 ### Open the Frontend
 ```bash
-open canvas.html
+open index.html
 ```
-Or simply double-click `canvas.html` in Finder.
+Or simply double-click `index.html` in Finder.
 
 ## Quick Start
 
@@ -131,3 +131,11 @@ Both servers run with `--reload` flag, so they automatically restart when you ma
 
 For more details on the keyphrase extraction API, see [api/README.md](api/README.md).
 
+
+# To restate
+
+once you have everything setup, in one terminal run 
+`uvicorn api.server:app --reload --port 8001`
+in the other terminal run 
+`fastapi dev main.py`
+then open in finder the index.html (via a web browser)
