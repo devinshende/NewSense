@@ -20,7 +20,7 @@ A text transformation and redaction application with NLP-powered keyphrase extra
 
 ### Pre setup
 Git clone repo. 
-Go to [gemini AI studio]([http://example.com](https://aistudio.google.com)) and go to Getting Started -> Dashboard -> API Keys -> Create API Key
+Go to [gemini AI studio](https://aistudio.google.com) and go to Getting Started -> Dashboard -> API Keys -> Create API Key
 
 then paste your API Key into a file in the main folder called `super_top_secret.txt`
 the file will just simply be the key. No quotes, nothing else, just something like
