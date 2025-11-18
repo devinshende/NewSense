@@ -3,6 +3,8 @@ The product our team introduced for the NLP Dumbathon 2025 at UC Santa Cruz orga
 
 A text transformation and redaction application with NLP-powered keyphrase extraction.
 
+[Video Demo](https://drive.google.com/file/d/1pG1ZL3WXwyeOvG0Jm_PeJnffu3OWyVPJ/view?usp=sharing)
+
 ## Features
 
 - Text transformation with various modes (brainrot, etc.)
