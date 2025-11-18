@@ -1,14 +1,17 @@
 # NewSense
 The product our team introduced for the NLP Dumbathon 2025 at UC Santa Cruz organized by Cal Blanco
 
-A text transformation and redaction application with NLP-powered keyphrase extraction.
+A text transformation and redaction application with NLP-powered keyphrase extraction that makes focused reading impossible.
+
+<img width="1298" height="618" alt="image" src="https://github.com/user-attachments/assets/dc947c10-0331-4472-9f5d-04a1eff48209" />
+
 
 [Video Demo](https://drive.google.com/file/d/1pG1ZL3WXwyeOvG0Jm_PeJnffu3OWyVPJ/view?usp=sharing)
 
 ## Features
 
-- Text transformation with various modes (brainrot, etc.)
-- Intelligent keyphrase extraction and redaction
+- LLM-powered text transformation and paraphrasing with various modes (brainrot, argumentative, emoji, etc.)
+- Intelligent keyphrase extraction and progressive redaction
 - Interactive canvas-based UI
 
 ## Setup
