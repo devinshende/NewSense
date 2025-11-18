@@ -1,6 +1,9 @@
-# NLPDumbathon 2025
+# NewSense
+The product our team introduced for the NLP Dumbathon 2025 at UC Santa Cruz organized by Cal Blanco
 
 A text transformation and redaction application with NLP-powered keyphrase extraction.
+
+[Video Demo](https://drive.google.com/file/d/1pG1ZL3WXwyeOvG0Jm_PeJnffu3OWyVPJ/view?usp=sharing)
 
 ## Features
 
@@ -14,8 +17,17 @@ A text transformation and redaction application with NLP-powered keyphrase extra
 
 - Python 3.11+
 - Virtual environment (included in `dumb/`)
+- A Gemini API Key from your own account
 
 ### Installation
+
+### Pre setup
+Git clone repo. 
+Go to [gemini AI studio](https://aistudio.google.com) and go to Getting Started -> Dashboard -> API Keys -> Create API Key
+
+then paste your API Key into a file in the main folder called `super_top_secret.txt`
+the file will just simply be the key. No quotes, nothing else, just something like
+`Aasfoiwjoeirjoias`
 
 1. **Activate your virtual environment**
 ```bash
@@ -50,9 +62,9 @@ This starts the redaction/keyphrase API at `http://localhost:8001`
 
 ### Open the Frontend
 ```bash
-open canvas.html
+open index.html
 ```
-Or simply double-click `canvas.html` in Finder.
+Or simply double-click `index.html` in Finder.
 
 ## Quick Start
 
@@ -131,3 +143,11 @@ Both servers run with `--reload` flag, so they automatically restart when you ma
 
 For more details on the keyphrase extraction API, see [api/README.md](api/README.md).
 
+
+# To restate
+
+once you have everything setup, in one terminal run 
+`uvicorn api.server:app --reload --port 8001`
+in the other terminal run 
+`fastapi dev main.py`
+then open in finder the index.html (via a web browser)

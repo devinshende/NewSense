@@ -1,13 +1,51 @@
-from google import genai
+import logging, os
+try:
+    from google import genai
+except Exception:
+    genai = None
 
 # Load API key
-with open('super_top_secret.txt', 'r') as f:
-    api_key = f.read().strip()
+client = None
+api_key = None
+# Environment variable names to check (in order)
+env_keys = [
+    'GENAI_API_KEY',
+    'GOOGLE_API_KEY',
+    'GOOGLE_GENERATIVE_API_KEY',
+]
+for k in env_keys:
+    v = os.getenv(k)
+    if v:
+        api_key = v.strip()
+        logging.info('Using API key from env var %s', k)
+        break
 
-client = genai.Client(api_key=api_key)
+if api_key is None:
+    # Fallback to file
+    try:
+        with open('super_top_secret.txt', 'r') as f:
+            api_key = f.read().strip()
+            print("LOADED API KEY ")
+            logging.info('Loaded API key from super_top_secret.txt')
+    except FileNotFoundError:
+        logging.warning('super_top_secret.txt not found; LLM client will be unavailable')
+    except Exception as e:
+        logging.exception('Failed to read super_top_secret.txt: %s', e)
+
+# Sanitize common wrapper quoting
+if api_key:
+    if (api_key.startswith('"') and api_key.endswith('"')) or (api_key.startswith("'") and api_key.endswith("'")):
+        api_key = api_key[1:-1].strip()
+
+try:
+    if genai is not None and api_key:
+        client = genai.Client(api_key=api_key)
+        logging.info('GenAI client initialized (masked key prefix: %s)', api_key[:8])
+except Exception as e:
+    logging.exception('Failed to initialize GenAI client: %s', e)
 
 # Global dictionary to store conversation history (if needed for a stateful chat)
-history = {} 
+history = {}
 
 
 prompts = {
@@ -46,34 +84,36 @@ def transform_text(user_input: str, mode: str = 'brainrot') -> dict:
     Returns:
         Dictionary with success status and transformed_text or error
     """
+    print("Transforming text with LLMs...")
     if not user_input:
         return {"success": False, "error": "No text provided"}
     
     # Get the appropriate prompt for the selected mode
     prompt = prompts.get(mode, prompts['brainrot']).format(user_input=user_input)
     
+    # If client isn't available, return a clear error
+    if client is None:
+        err = "GenAI client not configured (missing or invalid super_top_secret.txt)"
+        logging.error(err)
+        return {"success": False, "error": err}
+
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash", 
-            contents=prompt
+            model="gemini-2.5-flash",
+            contents=prompt,
         )
-        
-        transformed_text = response.text
-        
+
+        # response object shape may vary; attempt to read text
+        transformed_text = getattr(response, 'text', None) or getattr(response, 'content', None) or str(response)
+
         # Store in history
         history[f"{mode}_{len(history)}"] = {
             "user": user_input,
             "assistant": transformed_text,
-            "mode": mode
+            "mode": mode,
         }
-        
-        return {
-            "success": True,
-            "transformed_text": transformed_text
-        }
-    
+
+        return {"success": True, "transformed_text": transformed_text}
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        logging.exception('Error calling GenAI client')
+        return {"success": False, "error": str(e)}

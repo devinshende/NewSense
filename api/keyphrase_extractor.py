@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Callable, Set
 from functools import lru_cache
 import time
 
-from utils import (
+from api.utils import (
     create_phrase_object,
     filter_by_length,
     remove_overlapping_phrases,
@@ -14,7 +14,7 @@ from utils import (
     filter_excluded_words,
     random_sample_phrases,
 )
-from config import (
+from api.config import (
     SPACY_MODEL,
     EXTRACT_NOUN_CHUNKS,
     EXTRACT_NAMED_ENTITIES,

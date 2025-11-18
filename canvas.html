@@ -7,9 +7,15 @@
     <title>Content Editor</title>
     <!-- Load Tailwind CSS for styling and responsiveness -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Scary display font for redaction UI -->
+    <link href="https://fonts.googleapis.com/css2?family=Creepster&display=swap" rel="stylesheet">
     <!-- Load GSAP Core Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <style>
+        .font-scary {
+            font-family: 'Creepster', 'Papyrus', fantasy;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
@@ -60,6 +66,12 @@
             box-shadow: 0 6px 14px rgba(16, 24, 40, 0.12);
         }
 
+        /* Make the match sprite larger and keep it circular */
+        #char-1 {
+            width: 80px;
+            height: 80px;
+        }
+
         /* Words are inline-block so we can transform/blur individual words without collapsing layout */
         .word {
             display: inline-block;
@@ -92,6 +104,7 @@
                 background-color: transparent;
                 transform: scaleX(0);
             }
+
             to {
                 background-color: #000000;
                 transform: scaleX(1);
@@ -112,8 +125,8 @@
 
         /* baby girl Jeff */
         #char-6 {
-            width: 140px;
-            height: 140px;
+            width: 170px;
+            height: 210px;
         }
 
         /* Make the Cal sprite larger */
@@ -172,12 +185,24 @@
             <label for="style-mode" class="text-lg font-semibold text-gray-700">Select Mode:</label>
             <select id="style-mode"
                 class="mode-select block w-full sm:w-64 p-3 border border-gray-300 rounded-lg bg-gray-50 focus:ring-blue-500 focus:border-blue-500 text-base mode-select cursor-pointer">
-                <option value="corporate">💼 LinkedIn / Corporate Speak</option>
-                <option value="emoji">😂 Horrible Emojis Copypasta</option>
+                <option value="corporate">💼 LinkedIn Speak </option>
+                <option value="emoji">😂 Emoji Enhanced Text</option>
                 <option value="argumentative">⚔️ Argumentative Mode</option>
                 <option value="forgetful">🤔 Forgetful Mode</option>
-                <option value="brainrot">🤪 Brainrot / Slang</option>
+                <option value="brainrot">🤪 Brainrot </option>
             </select>
+        </div>
+
+        <!-- Redaction Status Indicator -->
+        <div id="redaction-status" class="mb-4 p-3 bg-gray-100 rounded-lg border border-gray-300 hidden">
+            <div class="flex items-center justify-between">
+                <span class="text-2xl font-semibold text-gray-700 font-scary">🔒 Redaction Progress:</span>
+                <span id="redaction-counter" class="text-5xl text-green-700 font-semibold font-scary">0 / 0</span>
+            </div>
+            <div class="mt-2 w-full bg-gray-300 rounded-full h-2">
+                <div id="redaction-progress-bar" class="bg-green-600 h-2 rounded-full transition-all duration-300"
+                    style="width: 0%"></div>
+            </div>
         </div>
 
 
@@ -187,9 +212,11 @@
             <p>Paste text on the home page to begin transformation.</p>
         </div>
 
-        <!-- Character Animation Layer -->
-        <div id="character-layer">
-            <div id="char-1" class="character" style="background-color: #a21f1f;"></div>
+        <!-- Character Animation Layer (hidden until text transform completes) -->
+        <div id="character-layer" style="opacity: 0; pointer-events: none;">
+            <div id="char-1" class="character"
+                style="background-image: url('assets/match.png'); background-size: 140%; background-position: center; background-repeat: no-repeat; background-color: #a21f1f;">
+            </div>
             <!-- char-2 uses Sabina.png sprite -->
             <div id="char-2" class="character"
                 style="background-image: url('assets/Sabina.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
@@ -206,10 +233,9 @@
             <div id="char-5" class="character"
                 style="background-image: url('assets/Kristina.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
             </div>
-            <div id="char-6" class="character" style="background-color: #b393d9;"></div>
-            <!-- char-6 uses jeffbaby placeholder SVG (replace with PNG if you add it into assets/) -->
+            <!-- char-6 uses bomb.png sprite -->
             <div id="char-6" class="character"
-                style="background-image: url('assets/jeffbaby.JPG'); background-size: cover; background-position: center; background-repeat: no-repeat;">
+                style="background-image: url('assets/bomb.png'); background-size: cover; background-position: center; background-repeat: no-repeat;">
             </div>
             <!-- char-7 uses Cal.png sprite -->
             <div id="char-7" class="character"
@@ -286,7 +312,7 @@
             // --- 2. API Integration with FastAPI Backend ---
             const API_URL = 'http://localhost:8000/transform';
             const KEYPHRASE_API_URL = 'http://localhost:8001/extract';
-            
+
             // Store keyphrases and redaction state
             let keyphraseIndices = [];
             let redactedCount = 0;
@@ -294,7 +320,11 @@
             let originalTransformedText = ''; // Store the original transformed text
             let lastRedactionTime = 0; // Cooldown timer for progressive redaction
             const REDACTION_COOLDOWN = 1000; // Minimum milliseconds between redactions
-            
+            // New batching/delay behavior for progressive redaction
+            let _isProcessingRedactionBatch = false;
+            const REDACTION_BATCH_FRACTION = 0.2; // portion of total keyphrases to redact per batch (20%)
+            const REDACTION_BATCH_DELAY = 500; // milliseconds to wait after each batch
+
             /**
              * Calls the FastAPI backend which uses model.py to transform text with Gemini AI
              * @param {string} text - The text to transform
@@ -308,10 +338,27 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ text, mode })
                     });
-                    
-                    const data = await response.json();
-                    return data.success ? data.transformed_text : fallbackTransform(text, mode);
+
+                    let data = null;
+                    try {
+                        data = await response.json();
+                    } catch (jsonErr) {
+                        console.error('Transform API returned non-JSON response', jsonErr, response);
+                        return fallbackTransform(text, mode);
+                    }
+
+                    console.log('Transform API response', response.status, data);
+
+                    if (data && data.success) return data.transformed_text;
+
+                    // If backend returned an error payload, log it for debugging
+                    if (data && data.error) {
+                        console.error('Transform API error:', data.error);
+                    }
+
+                    return fallbackTransform(text, mode);
                 } catch (error) {
+                    console.error('Network/error calling transform API:', error);
                     return fallbackTransform(text, mode);
                 }
             }
@@ -334,7 +381,7 @@
                             p: 0.3  // Extract 30% of keyphrases for progressive redaction
                         })
                     });
-                    
+
                     const data = await response.json();
                     console.log(`Received ${data.keyphrases.length} keyphrases`);
                     return data.keyphrases;
@@ -350,22 +397,22 @@
              */
             function applyRedactionToDOM(indices) {
                 if (!indices || indices.length === 0) return;
-                
+
                 // Get all text content to build character position map
                 const allText = originalTransformedText;
                 let charPosition = 0;
-                
+
                 // Walk through all paragraph elements
                 const paragraphs = outputArea.querySelectorAll('p');
-                
+
                 paragraphs.forEach(paragraph => {
                     const words = paragraph.querySelectorAll('.word');
-                    
+
                     words.forEach(word => {
                         const wordText = word.textContent;
                         const wordStart = charPosition;
                         const wordEnd = charPosition + wordText.length;
-                        
+
                         // Check if this word overlaps with any keyphrase to redact
                         let shouldRedact = false;
                         indices.forEach(([start, end]) => {
@@ -374,7 +421,7 @@
                                 shouldRedact = true;
                             }
                         });
-                        
+
                         if (shouldRedact && !word.classList.contains('redacted')) {
                             word.classList.add('redacted');
                             // Trigger animation
@@ -384,9 +431,9 @@
                                 ease: 'power2.out'
                             });
                         }
-                        
+
                         charPosition += wordText.length;
-                        
+
                         // Account for space after word
                         if (word.nextSibling && word.nextSibling.nodeType === Node.TEXT_NODE) {
                             charPosition += word.nextSibling.textContent.length;
@@ -394,38 +441,101 @@
                             charPosition += 1; // space between words
                         }
                     });
-                    
+
                     // Account for paragraph breaks
                     charPosition += 2; // \n\n between paragraphs
                 });
+            }
+
+            function updateRedactionStatus() {
+                const redactionStatusEl = document.getElementById('redaction-status');
+                const redactionCounterEl = document.getElementById('redaction-counter');
+                const redactionProgressBarEl = document.getElementById('redaction-progress-bar');
+                if (!redactionStatusEl || !redactionCounterEl || !redactionProgressBarEl) return;
+
+                if (!redactionEnabled) {
+                    redactionStatusEl.classList.add('hidden');
+                    return;
+                }
+
+                redactionStatusEl.classList.remove('hidden');
+                redactionCounterEl.textContent = `${redactedCount} / ${keyphraseIndices.length}`;
+                // If the counter text is long (e.g. "13 / 13"), make it a bit smaller
+                // so it fits and doesn't overpower the UI.
+                const counterTextLen = redactionCounterEl.textContent.trim().length;
+                if (counterTextLen >= 6) {
+                    // smaller for multi-digit counts
+                    redactionCounterEl.classList.remove('text-5xl');
+                    if (!redactionCounterEl.classList.contains('text-4xl')) {
+                        redactionCounterEl.classList.add('text-4xl');
+                    }
+                } else {
+                    // default bigger size for small counts
+                    redactionCounterEl.classList.remove('text-4xl');
+                    if (!redactionCounterEl.classList.contains('text-5xl')) {
+                        redactionCounterEl.classList.add('text-5xl');
+                    }
+                }
+                const pct = keyphraseIndices.length ? (redactedCount / keyphraseIndices.length) * 100 : 0;
+                redactionProgressBarEl.style.width = `${pct}%`;
+
+                // Keep the progress bar green at all times
+                redactionProgressBarEl.classList.remove('bg-black');
+                if (!redactionProgressBarEl.classList.contains('bg-green-600')) {
+                    redactionProgressBarEl.classList.add('bg-green-600');
+                }
             }
 
             /**
              * Progressively redacts text on collision events
              * Redacts one more keyphrase each time it's called
              */
-            function progressiveRedact() {
+            // Helper sleep for async delays
+            function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+            /**
+             * Progressively redacts text on collision events
+             * Processes a small batch (fraction of total keyphrases) and then waits 500ms.
+             */
+            async function progressiveRedact() {
                 if (!redactionEnabled || redactedCount >= keyphraseIndices.length) {
                     return;
                 }
-                
-                // Cooldown check: prevent rapid-fire redactions
+
+                // If a batch is currently being processed, ignore new triggers
+                if (_isProcessingRedactionBatch) return;
+
+                // Cooldown check: prevent extremely rapid triggers
                 const now = Date.now();
                 if (now - lastRedactionTime < REDACTION_COOLDOWN) {
                     return; // Too soon, skip this redaction
                 }
                 lastRedactionTime = now;
-                
-                // Redact one more keyphrase
-                redactedCount++;
-                // Only pass the newly added keyphrase, not all previous ones
-                const newKeyphraseIndex = [keyphraseIndices[redactedCount - 1]];
-                
-                console.log(`Redacting ${redactedCount}/${keyphraseIndices.length} keyphrases`);
-                console.log(`Redacting indices:`, keyphraseIndices[redactedCount - 1]);
-                
-                // Apply redaction to the DOM (only the new one)
-                applyRedactionToDOM(newKeyphraseIndex);
+
+                // Start batch processing
+                _isProcessingRedactionBatch = true;
+
+                // Decide batch size as a fraction of total keyphrases (at least 1)
+                const remaining = keyphraseIndices.length - redactedCount;
+                let batchSize = Math.max(1, Math.ceil(keyphraseIndices.length * REDACTION_BATCH_FRACTION));
+                batchSize = Math.min(batchSize, remaining);
+
+                console.log(`Processing redaction batch of ${batchSize} (remaining ${remaining})`);
+
+                for (let i = 0; i < batchSize; i++) {
+                    if (redactedCount >= keyphraseIndices.length) break;
+                    redactedCount++;
+                    const newKeyphraseIndex = [keyphraseIndices[redactedCount - 1]];
+                    console.log(`Redacting ${redactedCount}/${keyphraseIndices.length} indices:`, newKeyphraseIndex);
+                    applyRedactionToDOM(newKeyphraseIndex);
+                    updateRedactionStatus();
+                    // small micro-yield to let DOM updates/animations start (no visible delay)
+                    await sleep(20);
+                }
+
+                // After batch is done, wait the configured batch delay before allowing more
+                await sleep(REDACTION_BATCH_DELAY);
+                _isProcessingRedactionBatch = false;
             }
 
             // --- 3. Fallback Transformation Logic (if API fails) ---
@@ -440,7 +550,7 @@
                     emoji: (text) => text
                         .replace(/[.!?]/g, ' ✨ ')
                         .replace(/ /g, ' 💅 ') + ' 👑',
-                    argumentative: (text) => "It is logically indefensible to assume: " + text.toUpperCase() + ". Furthermore, the premise is fundamentally flawed.",
+                    argumentative: (text) => "It is indefensible to assume: " + text.toUpperCase() + ". Furthermore, the premise is fundamentally flawed.",
                     forgetful: (text) => text
                         .replace(/the /g, ' that one... ')
                         .replace(/is /g, ' wait, is it? ')
@@ -449,7 +559,7 @@
                         .replace(/good/g, 'bussin\'')
                         .replace(/winning/g, 'slaying') + ' no cap fr.'
                 };
-                
+
                 return contentTransforms[mode] ? contentTransforms[mode](text) : text;
             }
 
@@ -463,13 +573,15 @@
                 if (bg.includes('carmen')) behavior = 'carmen';
                 else if (bg.includes('cal')) behavior = 'cal';
                 else if (bg.includes('jeff')) behavior = 'jeff';
+                // Treat the match sprite (char-1 / match.png) like 'cal'
+                else if (charElement.id === 'char-1' || bg.includes('match')) behavior = 'cal';
 
                 function getRandomPositionFor(type) {
                     const maxX = Math.max(0, layerBounds.width - charWidth);
                     const maxY = Math.max(0, layerBounds.height - charHeight);
                     const x = gsap.utils.random(0, maxX);
-                    const y = type === 'jeff' ? 
-                        gsap.utils.random(maxY * 0.4, maxY * 0.85) : 
+                    const y = type === 'jeff' ?
+                        gsap.utils.random(maxY * 0.4, maxY * 0.85) :
                         gsap.utils.random(0, maxY);
                     return { x, y };
                 }
@@ -485,8 +597,14 @@
                     } else if (behavior === 'jeff') {
                         duration = gsap.utils.random(6, 11);
                     } else if (behavior === 'cal') {
+                        // Default Cal timings
                         duration = gsap.utils.random(0.35, 1.1);
                         ease = 'power1.inOut';
+                        // If this is the match sprite (char-1) make it snappier (faster side-to-side)
+                        if (charElement.id === 'char-1') {
+                            duration = gsap.utils.random(0.12, 0.45);
+                            ease = 'power1.inOut';
+                        }
                     } else {
                         duration = gsap.utils.random(3.5, 7.5);
                     }
@@ -502,9 +620,18 @@
                     if (behavior === 'carmen') {
                         gsap.to(charElement, { rotation: gsap.utils.random(-18, 18), duration: Math.max(0.3, duration / 3), ease: 'sine.inOut', yoyo: true, repeat: 1 });
                     } else if (behavior === 'cal') {
-                        gsap.to(charElement, { rotation: gsap.utils.random(-12, 12), duration: gsap.utils.random(0.06, 0.25), ease: 'none', yoyo: true, repeat: 1 });
+                        if (charElement.id === 'char-1') {
+                            // match: more rotation and faster rotation tween for a lively effect
+                            gsap.to(charElement, { rotation: gsap.utils.random(-22, 22), duration: gsap.utils.random(0.03, 0.12), ease: 'none', yoyo: true, repeat: 1 });
+                        } else {
+                            gsap.to(charElement, { rotation: gsap.utils.random(-12, 12), duration: gsap.utils.random(0.06, 0.25), ease: 'none', yoyo: true, repeat: 1 });
+                        }
                     } else if (behavior === 'jeff') {
-                        gsap.to(charElement, { rotation: gsap.utils.random(-4, 4), duration: duration * 0.5, ease: 'sine.inOut' });
+                        // Make Jeff slowly rotate continuously over time
+                        // Use a long random duration so each Jeff spins at a slightly different slow rate
+                        // speed up Jeff's slow spin (shorter rotation period)
+                        const spinDuration = gsap.utils.random(18, 35);
+                        gsap.to(charElement, { rotation: '+=360', duration: spinDuration, ease: 'linear', repeat: -1 });
                     }
                 }
 
@@ -543,7 +670,7 @@
                         if (overlap) {
                             if (w._isBouncing) return;
 
-                            // TRIGGER PROGRESSIVE REDACTION ON COLLISION
+                            // Trigger progressive redaction on any character-word collision
                             progressiveRedact();
 
                             // We'll animate this word and a small clump around it (previous + next)
@@ -605,12 +732,13 @@
                 });
 
                 try {
-                    const calEl = Array.from(characters).find(c => (c.style.backgroundImage || '').includes('Cal.png'));
-                    const babyEl = Array.from(characters).find(c => (c.style.backgroundImage || '').toLowerCase().includes('jeffbaby'));
-                    if (calEl && babyEl) {
-                        const crect = calEl.getBoundingClientRect();
-                        const brect = babyEl.getBoundingClientRect();
-                        const overlapSpecial = !(crect.right < brect.left || crect.left > brect.right || crect.bottom < brect.top || crect.top > brect.bottom);
+                    // Special collision: trigger when the bomb (char-6 / bomb.png) touches the match (char-1 / match.png)
+                    const bombEl = Array.from(characters).find(c => c.id === 'char-6' || (c.style.backgroundImage || '').toLowerCase().includes('bomb'));
+                    const matchEl = Array.from(characters).find(c => c.id === 'char-1' || (c.style.backgroundImage || '').toLowerCase().includes('match'));
+                    if (bombEl && matchEl) {
+                        const brect = bombEl.getBoundingClientRect();
+                        const mrect = matchEl.getBoundingClientRect();
+                        const overlapSpecial = !(brect.right < mrect.left || brect.left > mrect.right || brect.bottom < mrect.top || brect.top > mrect.bottom);
                         if (overlapSpecial && !window._isScreenShaking) {
                             window._isScreenShaking = true;
                             const overlay = document.getElementById('screen-overlay');
@@ -621,10 +749,40 @@
                             }
 
                             gsap.fromTo(documentCard, { x: 0 }, { x: 12, duration: 0.05, yoyo: true, repeat: 8, ease: 'power1.inOut', onComplete: () => { gsap.to(documentCard, { x: 0, duration: 0.08 }); } });
+                            // Show explosion.gif at the collision point
+                            try {
+                                const layerBounds = characterLayer.getBoundingClientRect();
+                                // center point between bomb and match
+                                const midX = (brect.left + brect.right + mrect.left + mrect.right) / 4;
+                                const midY = (brect.top + brect.bottom + mrect.top + mrect.bottom) / 4;
+                                const size = Math.max(80, Math.min(220, Math.max(brect.width, brect.height, mrect.width, mrect.height)));
+                                const img = document.createElement('img');
+                                img.src = 'assets/explosion.gif';
+                                img.className = 'explosion-temp';
+                                img.style.position = 'absolute';
+                                img.style.left = `${Math.round(midX - layerBounds.left - size / 2)}px`;
+                                img.style.top = `${Math.round(midY - layerBounds.top - size / 2)}px`;
+                                img.style.width = `${size}px`;
+                                img.style.height = `${size}px`;
+                                img.style.pointerEvents = 'none';
+                                img.style.zIndex = 50;
+                                img.style.opacity = '0';
+                                characterLayer.appendChild(img);
+
+                                gsap.fromTo(img, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.12, ease: 'power2.out' });
+                                gsap.to(img, { opacity: 0, delay: 0.7, duration: 0.4, onComplete: () => { try { img.remove(); } catch (e) { } } });
+                            } catch (e) { console.warn('Failed to show explosion gif', e); }
+                            // Also shake the redaction status UI so it matches the screen shake
+                            try {
+                                const redStatusEl = document.getElementById('redaction-status');
+                                if (redStatusEl) {
+                                    gsap.fromTo(redStatusEl, { x: 0 }, { x: 12, duration: 0.05, yoyo: true, repeat: 8, ease: 'power1.inOut', onComplete: () => { gsap.to(redStatusEl, { x: 0, duration: 0.08 }); } });
+                                }
+                            } catch (e) { }
                             setTimeout(() => { window._isScreenShaking = false; }, 900);
                         }
                     }
-                } catch (err) {}
+                } catch (err) { }
 
                 animationFrameId = requestAnimationFrame(checkCollisions);
             }
@@ -638,7 +796,7 @@
                 outputArea.innerHTML = '<p class="text-gray-400 italic animate-pulse">🤖 AI is Improving your text...</p>';
 
                 const transformedText = await transformTextWithAPI(rawInputText, mode);
-                
+
                 // Store the original transformed text for redaction
                 originalTransformedText = transformedText;
 
@@ -647,12 +805,15 @@
                 redactedCount = 0;
                 redactionEnabled = keyphraseIndices.length > 0;
                 lastRedactionTime = 0; // Reset cooldown timer for new content
-                
+
                 if (redactionEnabled) {
                     console.log(`Redaction enabled with ${keyphraseIndices.length} keyphrases`);
                 } else {
                     console.log('No keyphrases found - redaction disabled');
                 }
+
+                // Update the UI progress bar immediately
+                updateRedactionStatus();
 
                 const newContentHTML = ParseInput(transformedText);
 
@@ -688,9 +849,16 @@
                 });
             }
 
-            function initialize() {
-                updateContent(modeSelect.value, true);
+            async function initialize() {
+                // Wait for the initial content transform to finish
+                await updateContent(modeSelect.value, true);
+
+                // Reveal the character layer once the LLM transform and DOM injection are complete
+                gsap.to(characterLayer, { opacity: 1, duration: 0.6, ease: 'power2.out' });
+
                 gsap.from(title, { opacity: 0, y: -20, duration: 1, ease: "power2.out" });
+
+                // Start character animations after revealing the layer
                 characters.forEach(animateCharacter);
             }
 

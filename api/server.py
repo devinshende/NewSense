@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 import uvicorn
 
-from keyphrase_extractor import extract_keyphrases
+from api.keyphrase_extractor import extract_keyphrases
 
 
 class TextRequest(BaseModel):
@@ -67,5 +67,5 @@ async def extract_phrases(request: TextRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("api.server:app", host="0.0.0.0", port=8000, reload=True)
 

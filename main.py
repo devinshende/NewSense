@@ -2,8 +2,10 @@ from typing import Union
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import logging
 import model  # Import the model.py module
 
+logging.basicConfig(level=logging.INFO)
 app = FastAPI()
 
 # Enable CORS so the HTML frontend can call this API
@@ -33,7 +35,9 @@ async def transform_text_endpoint(request: TransformRequest):
     """
     # Call the transform_text function from model.py
     result = model.transform_text(request.text, request.mode)
+    logging.info("/transform called: mode=%s text_len=%d", request.mode, len(request.text or ""))
     return result
+    logging.info("/transform result: %s", {k: (v if k != 'transformed_text' else '<omitted>') for k, v in result.items()})
 
 
 @app.get("/health")
